@@ -25,23 +25,31 @@ def detect_silence(input_file: Path, **kwargs):
     if not input_file.exists():
         raise FileNotFoundError(f"Input file {input_file} does not exist!")
 
-    silent_detect_progress_update = kwargs.get("on_silence_detect_progress_update", None)
+    silent_detect_progress_update = kwargs.get(
+        "on_silence_detect_progress_update", None
+    )
 
     command = [
         "ffmpeg",
-        "-i", str(input_file),
+        "-hwaccel",
+        "cuda",
+        "-hwaccel_output_format",
+        "cuda",
+        "-i",
+        str(input_file),
         "-vn",
         "-af",
         f"silencedetect=noise={kwargs.get('silence_level', -35)}dB:d={kwargs.get('silence_time_threshold', 0.5)}",
-        "-f", "null",
-        "-"
+        "-f",
+        "null",
+        "-",
     ]
 
     console_output = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        universal_newlines=True
+        universal_newlines=True,
     ).stdout
 
     intervals = Intervals()
@@ -50,11 +58,13 @@ def detect_silence(input_file: Path, **kwargs):
 
     for line in console_output:
         if "[silencedetect" in line:
-            capture = re.search("\\[silencedetect @ [0-9xa-f]+] silence_([a-z]+): (-?[0-9]+.?[0-9]*[e-]*[0-9]*)",
-                                line)
+            capture = re.search(
+                "\\[silencedetect @ [0-9xa-f]+] silence_([a-z]+): (-?[0-9]+.?[0-9]*[e-]*[0-9]*)",
+                line,
+            )
             if capture is None:
                 continue
-                
+
             event = capture[1]
             time = float(capture[2])
 
@@ -78,7 +88,11 @@ def detect_silence(input_file: Path, **kwargs):
                 continue
             hour, minute, second_millisecond = capture[1].split(":")
             second, millisecond = second_millisecond.split(".")
-            media_duration = float(str(int(second) + 60 * (int(minute) + 60 * int(hour))) + "." + millisecond)
+            media_duration = float(
+                str(int(second) + 60 * (int(minute) + 60 * int(hour)))
+                + "."
+                + millisecond
+            )
 
     current_interval.end = media_duration
     intervals.add_interval(current_interval)
@@ -87,8 +101,7 @@ def detect_silence(input_file: Path, **kwargs):
         silent_detect_progress_update(media_duration, media_duration)
 
     intervals.optimize(
-        kwargs.get('short_interval_threshold', 0.3),
-        kwargs.get('stretch_time', 0.25)
+        kwargs.get("short_interval_threshold", 0.3), kwargs.get("stretch_time", 0.25)
     )
 
     return intervals

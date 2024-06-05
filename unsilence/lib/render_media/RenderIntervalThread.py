@@ -12,8 +12,15 @@ class RenderIntervalThread(threading.Thread):
     Worker thread that can render/process intervals based on defined options
     """
 
-    def __init__(self, thread_id, input_file: pathlib.Path, render_options: SimpleNamespace, task_queue: queue.Queue,
-                 thread_lock: threading.Lock, **kwargs):
+    def __init__(
+        self,
+        thread_id,
+        input_file: pathlib.Path,
+        render_options: SimpleNamespace,
+        task_queue: queue.Queue,
+        thread_lock: threading.Lock,
+        **kwargs,
+    ):
         """
         Initializes a new Worker (is run in daemon mode)
         :param thread_id: ID of this thread
@@ -50,18 +57,19 @@ class RenderIntervalThread(threading.Thread):
                     task.interval_output_file,
                     task.interval,
                     drop_corrupted_intervals=self.__render_options.drop_corrupted_intervals,
-                    minimum_interval_duration=self.__render_options.minimum_interval_duration
+                    minimum_interval_duration=self.__render_options.minimum_interval_duration,
                 )
 
                 if completed and self.__render_options.check_intervals:
                     probe_output = subprocess.run(
                         [
                             "ffprobe",
-                            "-loglevel", "quiet",
-                            f"{task.interval_output_file}"
+                            "-loglevel",
+                            "quiet",
+                            f"{task.interval_output_file}",
                         ],
                         stdout=subprocess.DEVNULL,
-                        stderr=subprocess.STDOUT
+                        stderr=subprocess.STDOUT,
                     )
                     completed = probe_output.returncode == 0
 
@@ -77,8 +85,14 @@ class RenderIntervalThread(threading.Thread):
         """
         self.__should_exit = True
 
-    def __render_interval(self, interval_output_file: pathlib.Path, interval: Interval,
-                          apply_filter=True, drop_corrupted_intervals=False, minimum_interval_duration=0.25):
+    def __render_interval(
+        self,
+        interval_output_file: pathlib.Path,
+        interval: Interval,
+        apply_filter=True,
+        drop_corrupted_intervals=False,
+        minimum_interval_duration=0.25,
+    ):
         """
         Renders an interval with the given render options
         :param interval_output_file: Where the current output file should be saved
@@ -88,7 +102,9 @@ class RenderIntervalThread(threading.Thread):
         :return: Whether it is corrupted or not
         """
 
-        command = self.__generate_command(interval_output_file, interval, apply_filter, minimum_interval_duration)
+        command = self.__generate_command(
+            interval_output_file, interval, apply_filter, minimum_interval_duration
+        )
 
         console_output = subprocess.run(
             command,
@@ -105,17 +121,26 @@ class RenderIntervalThread(threading.Thread):
                     interval,
                     apply_filter=False,
                     drop_corrupted_intervals=drop_corrupted_intervals,
-                    minimum_interval_duration=minimum_interval_duration
+                    minimum_interval_duration=minimum_interval_duration,
                 )
             else:
-                raise IOError(f"Input file is corrupted between {interval.start} and {interval.end} (in seconds)")
+                raise IOError(
+                    f"Input file is corrupted between {interval.start} and {interval.end} (in seconds)"
+                )
 
         if "Error initializing complex filter" in str(console_output.stdout):
             raise ValueError("Invalid render options")
 
         return True
 
-    def __generate_command(self, interval_output_file: pathlib.Path, interval: Interval, apply_filter: bool, minimum_interval_duration: float):
+
+    def __generate_command(
+        self,
+        interval_output_file: pathlib.Path,
+        interval: Interval,
+        apply_filter: bool,
+        minimum_interval_duration: float,
+    ): 
         """
         Generates the ffmpeg command to process the video
         :param interval_output_file: Where the media interval should be saved
@@ -123,15 +148,19 @@ class RenderIntervalThread(threading.Thread):
         :param apply_filter: Whether a filter should be applied or not
         :return: ffmpeg console command
         """
+
         command = [
             "ffmpeg",
+            "-hwaccel", "cuda",
+            "-hwaccel_output_format", "cuda",
             "-ss", f"{interval.start}",
             "-to", f"{interval.end}",
             "-i", f"{self.__input_file}",
             "-vsync", "1",
             "-async", "1",
             "-safe", "0",
-            "-ignore_unknown", "-y",
+            "-ignore_unknown",
+            "-y",
         ]
 
         if apply_filter:
@@ -144,20 +173,24 @@ class RenderIntervalThread(threading.Thread):
                 current_speed = self.__render_options.audible_speed
                 current_volume = self.__render_options.audible_volume
 
-            current_speed = RenderIntervalThread.clamp_speed(interval.duration, current_speed, minimum_interval_duration)
+            current_speed = RenderIntervalThread.clamp_speed(
+                interval.duration, current_speed, minimum_interval_duration
+            )
 
             if not self.__render_options.audio_only:
-                complex_filter.extend([
-                    f"[0:v]setpts={round(1 / current_speed, 4)}*PTS[v]",
-                ])
+                complex_filter.extend(
+                    [
+                        f"[0:v]scale_cuda=w=1280:h=720[v]",
+                    ]
+                )
 
-            complex_filter.extend([
-                f"[0:a]atempo={round(current_speed, 4)},volume={current_volume}[a]",
-            ])
-
-            command.extend(
-                ["-filter_complex", ";".join(complex_filter)]
+            complex_filter.extend(
+                [
+                    f"[0:a]atempo={round(current_speed, 4)}*PTS,volume={current_volume}[a]",
+                ]
             )
+
+            command.extend(["-filter_complex", ";".join(complex_filter)])
 
             if not self.__render_options.audio_only:
                 command.extend(["-map", "[v]"])
@@ -167,7 +200,7 @@ class RenderIntervalThread(threading.Thread):
             if self.__render_options.audio_only:
                 command.append("-vn")
 
-        command.append(str(interval_output_file))
+        command.extend(["-c:v", "h264_nvenc", "-preset", "fast", str(interval_output_file)])
 
         return command
 

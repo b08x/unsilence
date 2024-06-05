@@ -157,10 +157,12 @@ class MediaRenderer:
 
         command = [
             "ffmpeg",
+            "-hwaccel", "cuda",
+            "-hwaccel_output_format", "cuda",
             "-f", "concat",
             "-safe", "0",
             "-i", f"{concat_file.as_posix()}",
-            "-c", "copy",
+            "-c", "copy"
             "-y",
             "-loglevel", "verbose",
             f"{output_file.as_posix()}"
