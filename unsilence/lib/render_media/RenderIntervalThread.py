@@ -133,14 +133,7 @@ class RenderIntervalThread(threading.Thread):
 
         return True
 
-
-    def __generate_command(
-        self,
-        interval_output_file: pathlib.Path,
-        interval: Interval,
-        apply_filter: bool,
-        minimum_interval_duration: float,
-    ): 
+    def __generate_command(self, interval_output_file: pathlib.Path, interval: Interval, apply_filter: bool, minimum_interval_duration: float):
         """
         Generates the ffmpeg command to process the video
         :param interval_output_file: Where the media interval should be saved
@@ -148,7 +141,6 @@ class RenderIntervalThread(threading.Thread):
         :param apply_filter: Whether a filter should be applied or not
         :return: ffmpeg console command
         """
-
         command = [
             "ffmpeg",
             "-hwaccel", "cuda",
@@ -178,11 +170,10 @@ class RenderIntervalThread(threading.Thread):
             )
 
             if not self.__render_options.audio_only:
-                complex_filter.extend(
-                    [
-                        f"[0:v]scale_cuda=w=1280:h=720[v]",
-                    ]
-                )
+                # Remove the scaling filter
+                # complex_filter.extend([
+                #     f"[0:v]scale_cuda=w=1280:h=720[v]",
+                # ])
 
             complex_filter.extend(
                 [
@@ -193,14 +184,14 @@ class RenderIntervalThread(threading.Thread):
             command.extend(["-filter_complex", ";".join(complex_filter)])
 
             if not self.__render_options.audio_only:
-                command.extend(["-map", "[v]"])
+                command.extend(["-map", "[v]", "-c:v", "h264_nvenc", "-preset", "fast"])
 
             command.extend(["-map", "[a]"])
         else:
             if self.__render_options.audio_only:
                 command.append("-vn")
 
-        command.extend(["-c:v", "h264_nvenc", "-preset", "fast", str(interval_output_file)])
+        command.append(str(interval_output_file))
 
         return command
 
