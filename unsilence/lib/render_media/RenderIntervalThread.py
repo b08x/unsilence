@@ -124,7 +124,9 @@ class RenderIntervalThread(threading.Thread):
         :return: ffmpeg console command
         """
         command = [
-            "ffmpeg -hwaccel cuda -hwaccel_output_format cuda",
+            "ffmpeg", 
+            "-hwaccel", "cuda",
+            "-hwaccel_output_format", "cuda",
             "-ss", f"{interval.start}",
             "-to", f"{interval.end}",
             "-i", f"{self.__input_file}",
