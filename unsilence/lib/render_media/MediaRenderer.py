@@ -162,7 +162,8 @@ class MediaRenderer:
             "-f", "concat",
             "-safe", "0",
             "-i", f"{concat_file.as_posix()}",
-            "-c", "copy"
+            "-c:v", "h264_nvenc",
+            "-c:a", "copy",
             "-y",
             "-loglevel", "verbose",
             f"{output_file.as_posix()}"
